@@ -1,0 +1,25 @@
+[project]
+name = "document-rag-backend"
+version = "0.1.0"
+description = "Document ingestion API and conversational RAG API built with Django."
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy", "mypy_django_plugin.main", "mypy_drf_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+[[tool.mypy.overrides]]
+module = ["ingestion.migrations.*", "conversation.migrations.*"]
+ignore_errors = true

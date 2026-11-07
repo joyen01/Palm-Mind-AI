@@ -1,11 +1,3 @@
-"""Conversational RAG orchestration: route each message, then answer or book.
-
-Each user message makes one structured LLM call (intent, standalone question and booking fields
-together). Questions then go through custom retrieval and one answer call. Booking turns merge
-fields into a Redis draft, save the booking once every field is valid, and otherwise ask the
-user for what is missing.
-"""
-
 from uuid import UUID
 
 from django.conf import settings

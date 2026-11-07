@@ -1,5 +1,3 @@
-"""Configure Django settings for pytest."""
-
 import os
 
 import django

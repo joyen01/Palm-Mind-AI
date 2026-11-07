@@ -1,5 +1,3 @@
-"""Strategy 2: structure-aware chunking that packs whole paragraphs and sentences."""
-
 import re
 from collections.abc import Iterator, Sequence
 from typing import ClassVar
@@ -13,12 +11,6 @@ _SEPARATOR = "\n\n"
 
 
 class ParagraphChunker(TextChunker):
-    """Packs paragraphs into chunks, splitting oversized paragraphs by sentence first.
-
-    Consecutive chunks share trailing units totalling up to ``chunk_overlap`` characters, so a
-    sentence or paragraph that straddles a boundary is still retrievable from either side.
-    """
-
     name: ClassVar[ChunkingStrategyName] = "paragraph"
 
     def split(self, text: str) -> list[str]:
@@ -34,7 +26,6 @@ class ParagraphChunker(TextChunker):
         return chunks
 
     def _units(self, text: str) -> Iterator[str]:
-        """Yield paragraphs no longer than chunk_size, breaking long ones into sentences."""
         for paragraph in _PARAGRAPH_BREAK.split(text):
             paragraph = paragraph.strip()
             if not paragraph:
@@ -53,7 +44,6 @@ class ParagraphChunker(TextChunker):
                     yield from fallback.split(sentence)
 
     def _carry_over(self, previous: list[str], incoming: str) -> list[str]:
-        """Return the trailing units of ``previous`` that seed the next chunk."""
         tail: list[str] = []
         for unit in reversed(previous):
             candidate = [unit, *tail]

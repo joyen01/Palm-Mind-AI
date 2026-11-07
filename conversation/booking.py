@@ -1,5 +1,3 @@
-"""Interview booking rules: validating collected details and saving confirmed bookings."""
-
 from dataclasses import dataclass
 from datetime import date, time
 from uuid import UUID
@@ -15,19 +13,16 @@ _EMAIL_ADAPTER: TypeAdapter[str] = TypeAdapter(EmailStr)
 
 
 class SlotUnavailableError(Exception):
-    """The requested interview date and time are already booked."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class DraftValidation:
-    """A draft with invalid fields cleared, plus a message per cleared field."""
-
     draft: BookingDraft
     errors: dict[str, str]
 
 
 def validate_draft(draft: BookingDraft, today: date) -> DraftValidation:
-    """Check each collected field. Invalid fields are cleared so the user is asked again."""
     cleaned = draft.model_copy()
     errors: dict[str, str] = {}
 
@@ -68,7 +63,6 @@ def validate_draft(draft: BookingDraft, today: date) -> DraftValidation:
 
 
 def to_booking_details(draft: BookingDraft) -> BookingDetails | None:
-    """Return booking details when every field is present. Call after validate_draft."""
     if (
         draft.name is None
         or draft.email is None

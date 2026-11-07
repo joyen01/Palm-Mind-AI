@@ -1,5 +1,3 @@
-"""Model clients: Ollama (or OpenAI) for embeddings and chat, using the OpenAI-compatible SDK."""
-
 from collections.abc import Sequence
 from functools import lru_cache
 from typing import Literal, TypedDict
@@ -17,7 +15,6 @@ class ChatMessage(TypedDict):
 
 
 def chat_message(role: Literal["user", "assistant"], content: str) -> ChatMessage:
-    """Build one message for a chat request."""
     return {"role": role, "content": content}
 
 
@@ -36,8 +33,6 @@ def _format_messages(
 
 
 class Embedder:
-    """Turns text into embedding vectors with an embedding model (e.g. Ollama nomic-embed-text)."""
-
     def __init__(self, client: OpenAI, model: str, dimensions: int) -> None:
         self._client = client
         self._model = model
@@ -55,7 +50,6 @@ class Embedder:
             kwargs["dimensions"] = self._dimensions
 
         response = self._client.embeddings.create(**kwargs)  # type: ignore[arg-type]
-        # The API returns one item per input; sort by index to keep input order.
         return [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
 
     def embed_query(self, text: str) -> list[float]:
@@ -63,15 +57,12 @@ class Embedder:
 
 
 class ChatModel:
-    """Chat completions and schema-constrained extraction with Ollama or OpenAI."""
-
     def __init__(self, client: OpenAI, model: str, max_tokens: int) -> None:
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
 
     def complete(self, system: str, messages: Sequence[ChatMessage]) -> str:
-        """Return the model's free-text reply to the conversation."""
         response = self._client.chat.completions.create(
             model=self._model,
             max_tokens=self._max_tokens,
@@ -85,10 +76,6 @@ class ChatModel:
         messages: Sequence[ChatMessage],
         schema: type[ModelT],
     ) -> ModelT:
-        """Return the model's reply parsed into ``schema``.
-
-        Decoding is constrained to the JSON schema generated from ``schema``.
-        """
         response_format: ResponseFormatJSONSchema = {
             "type": "json_schema",
             "json_schema": {
@@ -112,7 +99,7 @@ def _get_client() -> OpenAI:
     if ollama_url:
         return OpenAI(
             base_url=f"{ollama_url.rstrip('/')}/v1",
-            api_key="ollama",  # Dummy key required by the OpenAI SDK
+            api_key="ollama",  # required by the SDK even when using Ollama
             timeout=settings.LLM_TIMEOUT_SECONDS,
             max_retries=2,
         )

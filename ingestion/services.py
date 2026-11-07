@@ -1,5 +1,3 @@
-"""Document ingestion workflow: extract, chunk, embed, index and record metadata."""
-
 from __future__ import annotations
 
 import hashlib
@@ -36,12 +34,6 @@ class DocumentIngestionService:
         self._embedding_batch_size = embedding_batch_size
 
     def ingest(self, upload: UploadedFile[bytes], strategy: ChunkingStrategyName) -> Document:
-        """Index an uploaded file and return its metadata record.
-
-        Raises DocumentProcessingError for unreadable or empty files. Other exceptions (for
-        example a failed embedding or vector-store call) propagate after the record is marked
-        as failed.
-        """
         filename = Path(upload.name or "upload").name
         file_type = detect_file_type(filename)
         content = _read_bytes(upload)

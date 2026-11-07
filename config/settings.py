@@ -76,15 +76,18 @@ QDRANT_URL = env_str("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = env_str("QDRANT_API_KEY")
 QDRANT_COLLECTION = env_str("QDRANT_COLLECTION", "document_chunks")
 
+# --- Model Provider (Ollama local / OpenAI fallback) ------------------------------------
+OLLAMA_BASE_URL = env_str("OLLAMA_BASE_URL", "http://localhost:11434")
 OPENAI_API_KEY = env_str("OPENAI_API_KEY")
-EMBEDDING_MODEL = env_str("EMBEDDING_MODEL", "text-embedding-3-small")
-EMBEDDING_DIMENSIONS = env_int("EMBEDDING_DIMENSIONS", 1536)
+ANTHROPIC_API_KEY = env_str("ANTHROPIC_API_KEY")
+
+EMBEDDING_MODEL = env_str("EMBEDDING_MODEL", "nomic-embed-text")
+EMBEDDING_DIMENSIONS = env_int("EMBEDDING_DIMENSIONS", 768)
 EMBEDDING_BATCH_SIZE = env_int("EMBEDDING_BATCH_SIZE", 64)
 
-ANTHROPIC_API_KEY = env_str("ANTHROPIC_API_KEY")
-CHAT_MODEL = env_str("CHAT_MODEL", "claude-sonnet-5-5")
+CHAT_MODEL = env_str("CHAT_MODEL", "llama3.2")
 CHAT_MAX_TOKENS = env_int("CHAT_MAX_TOKENS", 1024)
-LLM_TIMEOUT_SECONDS = env_int("LLM_TIMEOUT_SECONDS", 60)
+LLM_TIMEOUT_SECONDS = env_int("LLM_TIMEOUT_SECONDS", 120)
 
 UPLOAD_MAX_BYTES = env_int("UPLOAD_MAX_BYTES", 20 * 1024 * 1024)
 CHUNK_SIZE = env_int("CHUNK_SIZE", 1000)

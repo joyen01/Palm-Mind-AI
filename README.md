@@ -10,8 +10,8 @@ A backend with two REST APIs, built with Django and Django REST Framework:
 | Concern | Choice |
 | --- | --- |
 | Web framework | Django 5.2 + Django REST Framework |
-| Chat model | Anthropic Claude via the `anthropic` SDK (`claude-sonnet-5-5`, configurable) |
-| Embeddings | OpenAI `text-embedding-3-small` via the `openai` SDK (configurable) |
+| Chat model | Ollama (`llama3.2`, configurable, local - no API key needed) |
+| Embeddings | Ollama (`nomic-embed-text`, 768 dimensions, local - no API key needed) |
 | Vector store | Qdrant (`qdrant-client`) |
 | Metadata and bookings | PostgreSQL via the Django ORM |
 | Chat memory and booking drafts | Redis |
@@ -21,7 +21,7 @@ A backend with two REST APIs, built with Django and Django REST Framework:
 
 ```
 config/          Django project: settings, root URLs, WSGI entry point
-core/            Shared clients: Anthropic chat model, OpenAI embedder, Qdrant store, Redis
+core/            Shared clients: Ollama/OpenAI embedder and chat model, Qdrant store, Redis
 ingestion/       Document Ingestion API
   chunking/      Strategy 1 (fixed_size) and strategy 2 (paragraph), plus the factory
   extraction.py  PDF and TXT text extraction
@@ -32,34 +32,47 @@ conversation/    Conversational RAG API
   booking.py     Booking validation and persistence
   retrieval.py   Query embedding and top-k search
   prompts.py     Prompt templates
+tests/           Unit and integration test suite (chunking, booking, text extraction)
 ```
 
 ## Setup
 
-### Option A: Docker Compose (app, PostgreSQL, Redis and Qdrant)
+### Option A: Docker Compose (App, PostgreSQL, Redis, Qdrant, Ollama)
 
 ```bash
-cp .env.example .env          # then set OPENAI_API_KEY, ANTHROPIC_API_KEY and DJANGO_SECRET_KEY
+cp .env.example .env
 docker compose up --build
+```
+
+Once running, pull the local models in Ollama:
+```bash
+docker compose exec ollama ollama pull llama3.2
+docker compose exec ollama ollama pull nomic-embed-text
 ```
 
 The API is served at `http://localhost:8000`. Migrations run on startup.
 
-### Option B: Local Python
+### Option B: Local Setup (Native Ollama)
 
-Requires Python 3.12+ and running PostgreSQL, Redis and Qdrant services (the compose file starts them).
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # point POSTGRES_HOST, REDIS_URL and QDRANT_URL at your services
-python manage.py migrate
-python manage.py runserver
-```
+1. Install and start [Ollama](https://ollama.com/download) on your machine.
+2. Pull the required models:
+   ```bash
+   ollama pull llama3.2
+   ollama pull nomic-embed-text
+   ```
+3. Start dependencies (PostgreSQL, Redis, Qdrant) via Docker Compose:
+   ```bash
+   docker compose up -d db redis qdrant
+   ```
+4. Run Django migrations and start server:
+   ```bash
+   python manage.py migrate
+   python manage.py runserver
+   ```
 
 ### Configuration
 
-All settings come from environment variables; see [.env.example](.env.example). The required ones are `DJANGO_SECRET_KEY`, `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
+All settings come from environment variables; see [.env.example](.env.example). By default, it connects to local Ollama (`http://localhost:11434`), requiring **zero paid API keys**.
 
 ## Document Ingestion API
 

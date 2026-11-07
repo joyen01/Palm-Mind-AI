@@ -1,34 +1,42 @@
-"""Model clients: OpenAI for embeddings and Anthropic Claude for chat, used through their SDKs."""
+"""Model clients: Ollama (or OpenAI) for embeddings and chat, using the OpenAI-compatible SDK."""
 
 from collections.abc import Sequence
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, TypedDict
 
-from anthropic import Anthropic, transform_schema
-from anthropic.types import (
-    AssistantMessageParam,
-    ContentBlock,
-    OutputConfigParam,
-    TextBlock,
-    UserMessageParam,
-)
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
+from openai.types.shared_params import ResponseFormatJSONSchema
 from pydantic import BaseModel
 
-ChatMessage = UserMessageParam | AssistantMessageParam
+
+class ChatMessage(TypedDict):
+    role: Literal["user", "assistant", "system"]
+    content: str
 
 
 def chat_message(role: Literal["user", "assistant"], content: str) -> ChatMessage:
     """Build one message for a chat request."""
-    if role == "user":
-        return {"role": "user", "content": content}
-    return {"role": "assistant", "content": content}
+    return {"role": role, "content": content}
+
+
+def _format_messages(
+    system: str, messages: Sequence[ChatMessage]
+) -> list[ChatCompletionMessageParam]:
+    formatted: list[ChatCompletionMessageParam] = [{"role": "system", "content": system}]
+    for msg in messages:
+        if msg["role"] == "user":
+            formatted.append({"role": "user", "content": msg["content"]})
+        elif msg["role"] == "assistant":
+            formatted.append({"role": "assistant", "content": msg["content"]})
+        elif msg["role"] == "system":
+            formatted.append({"role": "system", "content": msg["content"]})
+    return formatted
 
 
 class Embedder:
-    """Turns text into embedding vectors with an OpenAI embedding model."""
+    """Turns text into embedding vectors with an embedding model (e.g. Ollama nomic-embed-text)."""
 
     def __init__(self, client: OpenAI, model: str, dimensions: int) -> None:
         self._client = client
@@ -38,11 +46,15 @@ class Embedder:
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        response = self._client.embeddings.create(
-            model=self._model,
-            input=list(texts),
-            dimensions=self._dimensions,
-        )
+        kwargs: dict[str, object] = {
+            "model": self._model,
+            "input": list(texts),
+        }
+        # Ollama returns native model dimensions; OpenAI supports optional dimensions parameter
+        if not getattr(settings, "OLLAMA_BASE_URL", ""):
+            kwargs["dimensions"] = self._dimensions
+
+        response = self._client.embeddings.create(**kwargs)  # type: ignore[arg-type]
         # The API returns one item per input; sort by index to keep input order.
         return [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
 
@@ -51,22 +63,21 @@ class Embedder:
 
 
 class ChatModel:
-    """Chat completions and schema-constrained extraction with Anthropic Claude."""
+    """Chat completions and schema-constrained extraction with Ollama or OpenAI."""
 
-    def __init__(self, client: Anthropic, model: str, max_tokens: int) -> None:
+    def __init__(self, client: OpenAI, model: str, max_tokens: int) -> None:
         self._client = client
         self._model = model
         self._max_tokens = max_tokens
 
     def complete(self, system: str, messages: Sequence[ChatMessage]) -> str:
         """Return the model's free-text reply to the conversation."""
-        response = self._client.messages.create(
+        response = self._client.chat.completions.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            system=system,
-            messages=list(messages),
+            messages=_format_messages(system, messages),
         )
-        return _text_of(response.content)
+        return (response.choices[0].message.content or "").strip()
 
     def extract[ModelT: BaseModel](
         self,
@@ -78,38 +89,44 @@ class ChatModel:
 
         Decoding is constrained to the JSON schema generated from ``schema``.
         """
-        output_config: OutputConfigParam = {
-            "format": {"type": "json_schema", "schema": transform_schema(schema)},
+        response_format: ResponseFormatJSONSchema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema.__name__,
+                "schema": schema.model_json_schema(),
+            },
         }
-        response = self._client.messages.create(
+        response = self._client.chat.completions.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            system=system,
-            messages=list(messages),
-            output_config=output_config,
+            messages=_format_messages(system, messages),
+            response_format=response_format,
         )
-        return schema.model_validate_json(_text_of(response.content))
+        content = response.choices[0].message.content or "{}"
+        return schema.model_validate_json(content)
 
 
-def _text_of(blocks: Sequence[ContentBlock]) -> str:
-    return "".join(block.text for block in blocks if isinstance(block, TextBlock)).strip()
-
-
-def _require_setting(value: str, name: str) -> str:
-    if not value:
-        raise ImproperlyConfigured(f"{name} must be set.")
-    return value
+@lru_cache(maxsize=1)
+def _get_client() -> OpenAI:
+    ollama_url = getattr(settings, "OLLAMA_BASE_URL", "").strip()
+    if ollama_url:
+        return OpenAI(
+            base_url=f"{ollama_url.rstrip('/')}/v1",
+            api_key="ollama",  # Dummy key required by the OpenAI SDK
+            timeout=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=2,
+        )
+    return OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        timeout=settings.LLM_TIMEOUT_SECONDS,
+        max_retries=2,
+    )
 
 
 @lru_cache(maxsize=1)
 def get_embedder() -> Embedder:
-    client = OpenAI(
-        api_key=_require_setting(settings.OPENAI_API_KEY, "OPENAI_API_KEY"),
-        timeout=settings.LLM_TIMEOUT_SECONDS,
-        max_retries=2,
-    )
     return Embedder(
-        client=client,
+        client=_get_client(),
         model=settings.EMBEDDING_MODEL,
         dimensions=settings.EMBEDDING_DIMENSIONS,
     )
@@ -117,13 +134,8 @@ def get_embedder() -> Embedder:
 
 @lru_cache(maxsize=1)
 def get_chat_model() -> ChatModel:
-    client = Anthropic(
-        api_key=_require_setting(settings.ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY"),
-        timeout=settings.LLM_TIMEOUT_SECONDS,
-        max_retries=2,
-    )
     return ChatModel(
-        client=client,
+        client=_get_client(),
         model=settings.CHAT_MODEL,
         max_tokens=settings.CHAT_MAX_TOKENS,
     )
